@@ -11,30 +11,42 @@ from .renderers import ArticleJSONRenderer, CommentJSONRenderer
 from .serializers import ArticleSerializer, CommentSerializer, TagSerializer
 
 
-class ArticleViewSet(mixins.CreateModelMixin, 
+class ArticleViewSet(mixins.CreateModelMixin,
                      mixins.ListModelMixin,
                      mixins.RetrieveModelMixin,
                      viewsets.GenericViewSet):
-
     lookup_field = 'slug'
     queryset = Article.objects.select_related('author', 'author__user')
     permission_classes = (IsAuthenticatedOrReadOnly,)
     renderer_classes = (ArticleJSONRenderer,)
     serializer_class = ArticleSerializer
 
+    def get_query_param(self, param):
+        """
+        Return Query Param's value
+
+        :params: param -> string
+        """
+        value = None
+        if self.request.query_params:
+            value = self.request.query_params.get(param)
+
+        return value
+
     def get_queryset(self):
+        """Return queryset based on query param."""
         queryset = self.queryset
 
-        author = self.request.query_params.get('author', None)
-        if author is not None:
+        author = self.get_query_param('author')
+        if author:
             queryset = queryset.filter(author__user__username=author)
 
-        tag = self.request.query_params.get('tag', None)
-        if tag is not None:
+        tag = self.get_query_param('tag')
+        if tag:
             queryset = queryset.filter(tags__tag=tag)
 
-        favorited_by = self.request.query_params.get('favorited', None)
-        if favorited_by is not None:
+        favorited_by = self.get_query_param('favorited_by')
+        if favorited_by:
             queryset = queryset.filter(
                 favorited_by__user__username=favorited_by
             )
@@ -42,6 +54,7 @@ class ArticleViewSet(mixins.CreateModelMixin,
         return queryset
 
     def create(self, request):
+        """Create a new article."""
         serializer_context = {
             'author': request.user.profile,
             'request': request
@@ -49,7 +62,7 @@ class ArticleViewSet(mixins.CreateModelMixin,
         serializer_data = request.data.get('article', {})
 
         serializer = self.serializer_class(
-        data=serializer_data, context=serializer_context
+            data=serializer_data, context=serializer_context
         )
         serializer.is_valid(raise_exception=True)
         serializer.save()
@@ -57,6 +70,7 @@ class ArticleViewSet(mixins.CreateModelMixin,
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
     def list(self, request):
+        """Return paginated list view."""
         serializer_context = {'request': request}
         page = self.paginate_queryset(self.get_queryset())
 
@@ -69,6 +83,7 @@ class ArticleViewSet(mixins.CreateModelMixin,
         return self.get_paginated_response(serializer.data)
 
     def retrieve(self, request, slug):
+        """Retrieve a single article based on slug field."""
         serializer_context = {'request': request}
 
         try:
@@ -83,21 +98,20 @@ class ArticleViewSet(mixins.CreateModelMixin,
 
         return Response(serializer.data, status=status.HTTP_200_OK)
 
-
     def update(self, request, slug):
+        """Update an article."""
         serializer_context = {'request': request}
 
         try:
             serializer_instance = self.queryset.get(slug=slug)
         except Article.DoesNotExist:
             raise NotFound('An article with this slug does not exist.')
-            
-        serializer_data = request.data.get('article', {})
 
+        serializer_data = request.data.get('article', {})
         serializer = self.serializer_class(
-            serializer_instance, 
+            serializer_instance,
             context=serializer_context,
-            data=serializer_data, 
+            data=serializer_data,
             partial=True
         )
         serializer.is_valid(raise_exception=True)
@@ -118,11 +132,7 @@ class CommentsListCreateAPIView(generics.ListCreateAPIView):
     serializer_class = CommentSerializer
 
     def filter_queryset(self, queryset):
-        # The built-in list function calls `filter_queryset`. Since we only
-        # want comments for a specific article, this is a good place to do
-        # that filtering.
-        filters = {self.lookup_field: self.kwargs[self.lookup_url_kwarg]}
-
+        filters = {self.lookup_field: self.kwargs.get(self.lookup_url_kwarg)}
         return queryset.filter(**filters)
 
     def create(self, request, article_slug=None):
