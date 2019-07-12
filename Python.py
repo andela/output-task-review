@@ -4,9 +4,9 @@ from rest_framework.permissions import IsAuthenticatedOrReadOnly
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import Article, Comment, Tag
+from .models import Article, Comment
 from .renderers import ArticleJSONRenderer, CommentJSONRenderer
-from .serializers import ArticleSerializer, CommentSerializer, TagSerializer
+from .serializers import ArticleSerializer, CommentSerializer
 
 
 class ArticleViewSet(mixins.CreateModelMixin, 
