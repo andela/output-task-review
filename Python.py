@@ -1,14 +1,12 @@
 from rest_framework import generics, mixins, status, viewsets
 from rest_framework.exceptions import NotFound
-from rest_framework.permissions import (
-    AllowAny, IsAuthenticated, IsAuthenticatedOrReadOnly
-)
+from rest_framework.permissions import IsAuthenticatedOrReadOnly
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import Article, Comment, Tag
+from .models import Article, Comment
 from .renderers import ArticleJSONRenderer, CommentJSONRenderer
-from .serializers import ArticleSerializer, CommentSerializer, TagSerializer
+from .serializers import ArticleSerializer, CommentSerializer
 
 
 class ArticleViewSet(mixins.CreateModelMixin, 
@@ -24,17 +22,19 @@ class ArticleViewSet(mixins.CreateModelMixin,
 
     def get_queryset(self):
         queryset = self.queryset
+        #if author | tag | favorited_by exists in the query parameters
+        #filter using the specified values
 
         author = self.request.query_params.get('author', None)
-        if author is not None:
+        if author:
             queryset = queryset.filter(author__user__username=author)
 
         tag = self.request.query_params.get('tag', None)
-        if tag is not None:
+        if tag:
             queryset = queryset.filter(tags__tag=tag)
 
         favorited_by = self.request.query_params.get('favorited', None)
-        if favorited_by is not None:
+        if favorited_by:
             queryset = queryset.filter(
                 favorited_by__user__username=favorited_by
             )
@@ -42,11 +42,12 @@ class ArticleViewSet(mixins.CreateModelMixin,
         return queryset
 
     def create(self, request):
+        #pass request object and use profile to serializer context
         serializer_context = {
             'author': request.user.profile,
             'request': request
         }
-        serializer_data = request.data.get('article', {})
+        serializer_data = request.data
 
         serializer = self.serializer_class(
         data=serializer_data, context=serializer_context
@@ -58,6 +59,7 @@ class ArticleViewSet(mixins.CreateModelMixin,
 
     def list(self, request):
         serializer_context = {'request': request}
+        # paginate queryset using default pagination
         page = self.paginate_queryset(self.get_queryset())
 
         serializer = self.serializer_class(
@@ -83,7 +85,6 @@ class ArticleViewSet(mixins.CreateModelMixin,
 
         return Response(serializer.data, status=status.HTTP_200_OK)
 
-
     def update(self, request, slug):
         serializer_context = {'request': request}
 
@@ -92,7 +93,7 @@ class ArticleViewSet(mixins.CreateModelMixin,
         except Article.DoesNotExist:
             raise NotFound('An article with this slug does not exist.')
             
-        serializer_data = request.data.get('article', {})
+        serializer_data = request.data
 
         serializer = self.serializer_class(
             serializer_instance, 
@@ -126,8 +127,8 @@ class CommentsListCreateAPIView(generics.ListCreateAPIView):
         return queryset.filter(**filters)
 
     def create(self, request, article_slug=None):
-        data = request.data.get('comment', {})
-        context = {'author': request.user.profile}
+        data = request.data
+        context = {'author': request.user.profile} #pass username as context to the serializer
 
         try:
             context['article'] = Article.objects.get(slug=article_slug)
