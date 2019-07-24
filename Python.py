@@ -1,23 +1,20 @@
 from rest_framework import generics, mixins, status, viewsets
 from rest_framework.exceptions import NotFound
 from rest_framework.permissions import (
-    AllowAny, IsAuthenticated, IsAuthenticatedOrReadOnly
+    IsAuthenticatedOrReadOnly
 )
 from rest_framework.response import Response
-from rest_framework.views import APIView
 
-from .models import Article, Comment, Tag
+from .models import Article, Comment
 from .renderers import ArticleJSONRenderer, CommentJSONRenderer
-from .serializers import ArticleSerializer, CommentSerializer, TagSerializer
+from .serializers import ArticleSerializer, CommentSerializer
 
 
-class ArticleViewSet(mixins.CreateModelMixin, 
-                     mixins.ListModelMixin,
-                     mixins.RetrieveModelMixin,
+class ArticleViewSet(mixins.ListModelMixin,
                      viewsets.GenericViewSet):
 
     lookup_field = 'slug'
-    queryset = Article.objects.select_related('author', 'author__user')
+    queryset = Article.objects.select_related('author')
     permission_classes = (IsAuthenticatedOrReadOnly,)
     renderer_classes = (ArticleJSONRenderer,)
     serializer_class = ArticleSerializer
@@ -27,7 +24,7 @@ class ArticleViewSet(mixins.CreateModelMixin,
 
         author = self.request.query_params.get('author', None)
         if author is not None:
-            queryset = queryset.filter(author__user__username=author)
+            queryset = queryset.filter(author__username=author)
 
         tag = self.request.query_params.get('tag', None)
         if tag is not None:
@@ -36,7 +33,7 @@ class ArticleViewSet(mixins.CreateModelMixin,
         favorited_by = self.request.query_params.get('favorited', None)
         if favorited_by is not None:
             queryset = queryset.filter(
-                favorited_by__user__username=favorited_by
+                favorited_by__username=favorited_by
             )
 
         return queryset
@@ -49,8 +46,8 @@ class ArticleViewSet(mixins.CreateModelMixin,
         serializer_data = request.data.get('article', {})
 
         serializer = self.serializer_class(
-        data=serializer_data, context=serializer_context
-        )
+            data=serializer_data, context=serializer_context
+            )
         serializer.is_valid(raise_exception=True)
         serializer.save()
 
@@ -83,7 +80,6 @@ class ArticleViewSet(mixins.CreateModelMixin,
 
         return Response(serializer.data, status=status.HTTP_200_OK)
 
-
     def update(self, request, slug):
         serializer_context = {'request': request}
 
@@ -91,7 +87,7 @@ class ArticleViewSet(mixins.CreateModelMixin,
             serializer_instance = self.queryset.get(slug=slug)
         except Article.DoesNotExist:
             raise NotFound('An article with this slug does not exist.')
-            
+
         serializer_data = request.data.get('article', {})
 
         serializer = self.serializer_class(
@@ -117,13 +113,9 @@ class CommentsListCreateAPIView(generics.ListCreateAPIView):
     renderer_classes = (CommentJSONRenderer,)
     serializer_class = CommentSerializer
 
-    def filter_queryset(self, queryset):
-        # The built-in list function calls `filter_queryset`. Since we only
-        # want comments for a specific article, this is a good place to do
-        # that filtering.
+    def get_queryset(self):
         filters = {self.lookup_field: self.kwargs[self.lookup_url_kwarg]}
-
-        return queryset.filter(**filters)
+        return self.queryset.filter(**filters)
 
     def create(self, request, article_slug=None):
         data = request.data.get('comment', {})
